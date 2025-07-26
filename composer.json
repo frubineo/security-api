@@ -1,1 +1,103 @@
-{ "name": "frubineo/security-api", "description": "Service de sécurité et authentification", "type": "project", "license": "proprietary", "require": { "php": ">=8.2" }, "autoload": { "psr-4": { "App\\": "src/" } }, "autoload-dev": { "psr-4": { "App\\Tests\\": "tests/" } }, "minimum-stability": "stable", "prefer-stable": true, "config": { "optimize-autoloader": true, "sort-packages": true } }
+{
+    "name": "bimstrength/security-api",
+    "description": "🔐 Security API - Central Authentication & Authorization Hub",
+    "type": "project",
+    "license": "proprietary",
+    "version": "1.0.0",
+    "require": {
+        "php": "^8.3",
+        "symfony/framework-bundle": "^7.0",
+        "symfony/console": "^7.0",
+        "symfony/dotenv": "^7.0",
+        "symfony/flex": "^2",
+        "symfony/runtime": "^7.0",
+        "symfony/monolog-bundle": "^3.10",
+        "symfony/security-bundle": "^7.0",
+        "symfony/validator": "^7.0",
+        "symfony/serializer": "^7.0",
+        "symfony/http-client": "^7.0",
+        "symfony/rate-limiter": "^7.0",
+        "symfony/cache": "^7.0",
+        "doctrine/doctrine-bundle": "^2.11",
+        "doctrine/orm": "^3.0",
+        "doctrine/migrations": "^3.7",
+        "lexik/jwt-authentication-bundle": "^2.20",
+        "predis/predis": "^2.2",
+        "ramsey/uuid": "^4.7",
+        "nelmio/cors-bundle": "^2.4",
+        "paragonie/sodium_compat": "^1.20",
+        "web-token/jwt-framework": "^3.3",
+        "endroid/qr-code": "^5.0",
+        "bacon/bacon-qr-code": "^2.0",
+        "guzzlehttp/guzzle": "^7.8"
+    },
+    "require-dev": {
+        "symfony/phpunit-bridge": "^7.0",
+        "phpunit/phpunit": "^10.5",
+        "symfony/maker-bundle": "^1.52",
+        "doctrine/doctrine-fixtures-bundle": "^3.5",
+        "phpstan/phpstan": "^1.10",
+        "friendsofphp/php-cs-fixer": "^3.40"
+    },
+    "config": {
+        "allow-plugins": {
+            "symfony/flex": true,
+            "symfony/runtime": true
+        },
+        "sort-packages": true,
+        "optimize-autoloader": true,
+        "classmap-authoritative": true,
+        "apcu-autoloader": true
+    },
+    "autoload": {
+        "psr-4": {
+            "SecurityApi\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SecurityApi\\Tests\\": "tests/"
+        }
+    },
+    "replace": {
+        "symfony/polyfill-ctype": "*",
+        "symfony/polyfill-iconv": "*",
+        "symfony/polyfill-php72": "*",
+        "symfony/polyfill-php73": "*",
+        "symfony/polyfill-php74": "*",
+        "symfony/polyfill-php80": "*",
+        "symfony/polyfill-php81": "*",
+        "symfony/polyfill-php82": "*"
+    },
+    "scripts": {
+        "auto-scripts": {
+            "cache:clear": "symfony-cmd",
+            "assets:install %PUBLIC_DIR%": "symfony-cmd"
+        },
+        "post-install-cmd": [
+            "@auto-scripts"
+        ],
+        "post-update-cmd": [
+            "@auto-scripts"
+        ],
+        "quality": [
+            "php-cs-fixer fix",
+            "phpstan analyse"
+        ],
+        "test": [
+            "phpunit"
+        ]
+    },
+    "conflict": {
+        "symfony/symfony": "*"
+    },
+    "extra": {
+        "symfony": {
+            "allow-contrib": false,
+            "require": "7.0.*",
+            "docker": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
