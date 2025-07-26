@@ -1,0 +1,207 @@
+# 🔐 SECURITY-API - DOCKERFILE PRODUCTION ULTRA-SÉCURISÉ
+# Multi-stage build pour sécurité et performance maximales
+
+# ================================
+# STAGE 1: BUILDER
+# ================================
+FROM php:8.3-fpm-alpine3.19 AS builder
+
+LABEL maintainer="BimStrength Security Team <security@bimstrength.com>"
+LABEL version="1.0.0"
+LABEL description="Security API - Production Ultra-Secured"
+LABEL org.opencontainers.image.source="https://github.com/bimstrength/security-api"
+LABEL org.opencontainers.image.vendor="BimStrength"
+LABEL org.opencontainers.image.title="Security API"
+LABEL security.level="MILITARY_GRADE"
+
+# Variables d'environnement build
+ARG APP_ENV=prod
+ARG APP_DEBUG=0
+ARG COMPOSER_ALLOW_SUPERUSER=1
+ARG COMPOSER_NO_DEV=1
+
+ENV APP_ENV=${APP_ENV}
+ENV APP_DEBUG=${APP_DEBUG}
+
+# Installation des dépendances système Alpine
+RUN apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS \
+        curl-dev \
+        libedit-dev \
+        libxml2-dev \
+        openssl-dev \
+        sqlite-dev \
+        libsodium-dev \
+        redis \
+        postgresql-dev \
+        zip \
+        unzip \
+        git \
+    && apk add --no-cache \
+        curl \
+        ca-certificates \
+        libsodium \
+        redis \
+        postgresql-client
+
+# Installation des extensions PHP critiques pour sécurité
+RUN docker-php-ext-install -j$(nproc) \
+        opcache \
+        pdo \
+        pdo_mysql \
+        pdo_pgsql \
+        sodium \
+        bcmath \
+        sockets \
+    && pecl install \
+        redis-6.0.2 \
+        uuid-1.2.0 \
+    && docker-php-ext-enable \
+        redis \
+        uuid
+
+# Configuration PHP optimisée pour sécurité
+COPY docker/php/php.ini-production /usr/local/etc/php/php.ini
+COPY docker/php/php-fpm.conf /usr/local/etc/php-fpm.conf
+COPY docker/php/security.conf /usr/local/etc/php-fpm.d/security.conf
+
+# Installation de Composer
+COPY --from=composer:2.6 /usr/bin/composer /usr/bin/composer
+
+# Création utilisateur non-root pour sécurité
+RUN addgroup -g 1001 -S security && \
+    adduser -u 1001 -S security -G security
+
+# Configuration répertoire de travail
+WORKDIR /var/www/html
+
+# Copie des fichiers de configuration Composer
+COPY composer.json composer.lock ./
+
+# Installation des dépendances PHP (cache optimisé)
+RUN composer install \
+        --no-dev \
+        --no-scripts \
+        --no-suggest \
+        --optimize-autoloader \
+        --classmap-authoritative \
+        --apcu-autoloader \
+    && composer clear-cache
+
+# ================================
+# STAGE 2: PRODUCTION
+# ================================
+FROM php:8.3-fpm-alpine3.19 AS production
+
+# Copie des labels depuis builder
+LABEL maintainer="BimStrength Security Team <security@bimstrength.com>"
+LABEL version="1.0.0"
+LABEL description="Security API - Production Ultra-Secured"
+LABEL security.level="MILITARY_GRADE"
+
+# Variables d'environnement production
+ENV APP_ENV=prod
+ENV APP_DEBUG=0
+ENV PHP_OPCACHE_ENABLE=1
+ENV PHP_OPCACHE_MEMORY_CONSUMPTION=256
+ENV PHP_OPCACHE_MAX_ACCELERATED_FILES=20000
+ENV PHP_OPCACHE_VALIDATE_TIMESTAMPS=0
+ENV PHP_OPCACHE_REVALIDATE_FREQ=0
+
+# Installation uniquement des dépendances runtime nécessaires
+RUN apk add --no-cache \
+        ca-certificates \
+        curl \
+        libsodium \
+        postgresql-client \
+        redis \
+        nginx \
+        supervisor \
+    && rm -rf /var/cache/apk/*
+
+# Copie des extensions PHP depuis builder
+COPY --from=builder /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
+COPY --from=builder /usr/local/etc/php/ /usr/local/etc/php/
+
+# Création utilisateur sécurisé
+RUN addgroup -g 1001 -S security && \
+    adduser -u 1001 -S security -G security
+
+# Configuration répertoires avec permissions strictes
+WORKDIR /var/www/html
+RUN mkdir -p \
+        var/cache \
+        var/log \
+        var/sessions \
+        public \
+    && chown -R security:security /var/www/html \
+    && chmod -R 755 /var/www/html \
+    && chmod -R 750 var/
+
+# Copie de l'application depuis builder
+COPY --from=builder --chown=security:security /var/www/html/vendor/ ./vendor/
+COPY --chown=security:security . .
+
+# Installation des assets et cache
+USER security
+RUN php bin/console cache:clear --env=prod \
+    && php bin/console cache:warmup --env=prod \
+    && chmod -R 444 var/cache/prod/ \
+    && find var/cache/prod/ -type d -exec chmod 555 {} \;
+
+# Configuration Nginx ultra-sécurisée
+USER root
+COPY docker/nginx/nginx.conf /etc/nginx/nginx.conf
+COPY docker/nginx/security-api.conf /etc/nginx/http.d/default.conf
+
+# Configuration Supervisor
+COPY docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Configuration des logs
+RUN mkdir -p /var/log/security-api \
+    && chown security:security /var/log/security-api \
+    && chmod 750 /var/log/security-api
+
+# Health check avec timeout strict
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/api/health || exit 1
+
+# Exposition du port (non-root)
+EXPOSE 8080
+
+# Volumes pour logs et cache (lecture seule en production)
+VOLUME ["/var/log/security-api"]
+
+# Utilisateur final non-root
+USER security
+
+# Point d'entrée sécurisé
+ENTRYPOINT ["docker/entrypoint.sh"]
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+
+# ================================
+# SÉCURITÉ FINALE
+# ================================
+# Suppression des outils de build
+USER root
+RUN apk del .build-deps 2>/dev/null || true \
+    && rm -rf \
+        /tmp/* \
+        /var/tmp/* \
+        /usr/src/* \
+        /var/cache/apk/* \
+        /root/.composer \
+        /root/.cache
+
+# Protection finale
+USER security
+RUN rm -rf \
+        tests/ \
+        .git/ \
+        .github/ \
+        docker/ \
+        *.md \
+        .env.test \
+        .env.local \
+        .gitignore \
+        .env.dist 

@@ -1,0 +1,141 @@
+security:
+    enable_authenticator_manager: true
+    
+    # 🔐 HIÉRARCHIE DE RÔLES MILITAIRE
+    role_hierarchy:
+        ROLE_USER:           []
+        ROLE_ANALYST:        [ROLE_USER]
+        ROLE_SYSTEM:         [ROLE_USER]
+        ROLE_ADMIN:          [ROLE_USER, ROLE_SYSTEM, ROLE_ANALYST]
+        ROLE_SUPER_ADMIN:    [ROLE_ADMIN]
+        ROLE_SECURITY:       [ROLE_SUPER_ADMIN] # 🎯 Rôle suprême pour security-api
+    
+    # 🔒 CHIFFREMENT SODIUM ULTRA-SÉCURISÉ
+    password_hashers:
+        SecurityApi\Domain\Entity\User:
+            algorithm: 'sodium'
+            memory_cost: 65536      # 64 MB (maximum)
+            time_cost: 4            # 4 iterations
+            migrate_from: ['bcrypt'] # Migration depuis bcrypt
+    
+    # 👥 PROVIDERS D'AUTHENTIFICATION
+    providers:
+        # Provider principal pour utilisateurs de la base
+        security_users:
+            entity:
+                class: SecurityApi\Domain\Entity\User
+                property: email
+                
+        # Provider pour API Keys (JWT + API Key combo)
+        api_key_provider:
+            id: SecurityApi\Infrastructure\Security\ApiKeyUserProvider
+            
+        # Provider pour JWT uniquement
+        jwt_provider:
+            id: SecurityApi\Infrastructure\Security\JwtUserProvider
+            
+        # Chain provider pour authentification multiple
+        chain_provider:
+            chain:
+                providers: [jwt_provider, api_key_provider, security_users]
+    
+    # 🛡️ FIREWALLS ULTRA-SÉCURISÉS
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+        
+        # 📊 Endpoints de monitoring (sans auth mais avec rate limiting)
+        monitoring:
+            pattern: ^/api/(health|metrics|ready|live)
+            security: false
+            # ✅ Rate limiting même sur endpoints publics
+            rate_limiter:
+                - health_check_limiter
+        
+        # 🔐 API v1 - Authentification principale
+        api_v1:
+            pattern: ^/api/v1
+            stateless: true
+            provider: chain_provider
+            
+            # 🎯 AUTHENTIFICATEURS MULTIPLES
+            custom_authenticators:
+                - SecurityApi\Infrastructure\Security\JwtAuthenticator
+                - SecurityApi\Infrastructure\Security\ApiKeyAuthenticator
+                - SecurityApi\Infrastructure\Security\MfaAuthenticator
+            
+            entry_point: SecurityApi\Infrastructure\Security\JwtAuthenticator
+            
+            # 🚫 PROTECTION ANTI-BRUTE FORCE MILITAIRE
+            login_throttling:
+                max_attempts: 3          # 🔥 3 tentatives max (vs 5)
+                interval: '1 hour'       # 🔥 Blocage 1h (vs 30min)
+                lock_factory: 'lock.redis.factory'
+            
+            # 📝 HANDLERS SÉCURITÉ AVANCÉS
+            failure_handler: SecurityApi\Infrastructure\Security\AuthenticationFailureHandler
+            success_handler: SecurityApi\Infrastructure\Security\AuthenticationSuccessHandler
+            
+        # 🔒 Admin API - Accès ultra-restreint
+        admin_api:
+            pattern: ^/api/admin
+            stateless: true
+            provider: security_users
+            
+            custom_authenticators:
+                - SecurityApi\Infrastructure\Security\AdminAuthenticator
+                
+            # 🎯 RESTRICTIONS IP POUR ADMIN
+            access_control:
+                - { path: ^/api/admin, roles: ROLE_SECURITY, ips: ['127.0.0.1', '::1'] }
+    
+    # 🛡️ CONTRÔLES D'ACCÈS GRANULAIRES
+    access_control:
+        # Health checks publics
+        - { path: ^/api/(health|metrics|ready|live), roles: PUBLIC_ACCESS }
+        
+        # Authentification - accès public
+        - { path: ^/api/v1/auth/(login|refresh), roles: PUBLIC_ACCESS }
+        
+        # Gestion des tokens - utilisateurs authentifiés
+        - { path: ^/api/v1/auth/(logout|revoke|me), roles: ROLE_USER }
+        
+        # Gestion API Keys - utilisateurs confirmés
+        - { path: ^/api/v1/auth/api-key, roles: ROLE_ANALYST }
+        
+        # MFA - utilisateurs avancés
+        - { path: ^/api/v1/auth/mfa, roles: ROLE_USER }
+        
+        # Gestion utilisateurs - admins
+        - { path: ^/api/v1/users, roles: ROLE_ADMIN }
+        
+        # Audit et logs - sécurité uniquement
+        - { path: ^/api/v1/audit, roles: ROLE_SECURITY }
+        - { path: ^/api/v1/logs, roles: ROLE_SECURITY }
+        
+        # Configuration sécurité - sécurité uniquement
+        - { path: ^/api/v1/security, roles: ROLE_SECURITY }
+        
+        # Admin API - ULTRA-RESTREINT
+        - { path: ^/api/admin, roles: ROLE_SECURITY, requires_channel: https }
+        
+        # Par défaut - authentification requise
+        - { path: ^/api, roles: ROLE_USER }
+    
+    # 🔐 CONFIGURATION SUPPLÉMENTAIRE
+    remember_me:
+        secret: '%env(SECURITY_REMEMBER_ME_SECRET)%'
+        lifetime: 604800 # 7 jours
+        path: /
+        domain: '%env(APP_DOMAIN)%'
+        secure: true     # HTTPS uniquement
+        httponly: true   # JavaScript interdit
+        samesite: 'strict'
+    
+    # 🎯 LOGOUT SÉCURISÉ
+    logout:
+        path: /api/v1/auth/logout
+        target: /
+        invalidate_session: true
+        clear_site_data: ['cache', 'cookies', 'storage'] 
